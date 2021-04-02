@@ -101,18 +101,18 @@ func TestBlockDecode(t *testing.T) {
 		},
 		{
 			"repeat_match_len",
-			emitSeq("a", 1, 4),
-			[]byte("aaaaa"),
+			concat(emitSeq("a", 1, 4), emitSeq("end", 0, 0)),
+			[]byte("aaaaaend"),
 		},
 		{
 			"repeat_match_len_2_seq",
-			concat(emitSeq("a", 1, 4), emitSeq("B", 1, 4)),
-			[]byte("aaaaaBBBBB"),
+			concat(emitSeq("a", 1, 4), emitSeq("B", 1, 4), emitSeq("end", 0, 0)),
+			[]byte("aaaaaBBBBBend"),
 		},
 		{
 			"long_match",
-			emitSeq("A", 1, 16),
-			bytes.Repeat([]byte("A"), 17),
+			concat(emitSeq("A", 1, 16), emitSeq("end", 0, 0)),
+			[]byte(strings.Repeat("A", 17) + "end"),
 		},
 		{
 			"repeat_match_log_len_2_seq",
@@ -129,8 +129,11 @@ func TestBlockDecode(t *testing.T) {
 				t.Log(-n)
 			}
 
-			if !bytes.Equal(buf, test.exp) {
+			if !bytes.Equal(buf[0:n], test.exp) {
 				t.Fatalf("expected %q got %q", test.exp, buf)
+			}
+			if n != len(test.exp) {
+				t.Fatalf("expected %d bytes got %d bytes", len(test.exp), n)
 			}
 		})
 	}
