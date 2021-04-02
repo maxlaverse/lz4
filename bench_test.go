@@ -50,7 +50,7 @@ func BenchmarkUncompress(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, _ = lz4.UncompressBlock(pg1661LZ4, buf)
+		_, _ = lz4.UncompressBlock(pg1661LZ4, buf, nil)
 	}
 }
 

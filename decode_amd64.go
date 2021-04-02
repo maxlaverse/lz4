@@ -5,4 +5,4 @@
 package lz4
 
 //go:noescape
-func decodeBlock(dst, src []byte) int
+func decodeBlock(dst, src, dict []byte) int

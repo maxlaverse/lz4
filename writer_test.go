@@ -142,7 +142,7 @@ func TestIssue51(t *testing.T) {
 	zbuf = zbuf[:n]
 
 	buf := make([]byte, 8192)
-	n, err = lz4.UncompressBlock(zbuf, buf)
+	n, err = lz4.UncompressBlock(zbuf, buf, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

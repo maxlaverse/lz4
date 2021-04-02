@@ -2,7 +2,7 @@
 
 package lz4
 
-func decodeBlock(dst, src []byte) (ret int) {
+func decodeBlock(dst, src, dict []byte) (ret int) {
 	const hasError = -2
 	defer func() {
 		if recover() != nil {
@@ -32,7 +32,7 @@ func decodeBlock(dst, src []byte) (ret int) {
 					// if the match length (4..18) fits within the literals, then copy
 					// all 18 bytes, even if not all are part of the literals.
 					mLen += 4
-					if offset := int(src[si]) | int(src[si+1])<<8; mLen <= offset {
+					if offset := int(src[si]) | int(src[si+1])<<8; mLen <= offset && offset < di {
 						i := di - offset
 						end := i + 18
 						if end > len(dst) {
@@ -82,6 +82,38 @@ func decodeBlock(dst, src []byte) (ret int) {
 		}
 		mLen += minMatch
 
+		if di < offset {
+			// The match is beyond our block, meaning in the dictionnary
+
+			if offset-di > mLen {
+				// The match is entirely contained in the dictionnary. Just copy!
+				copy(dst[di:di+mLen], dict[len(dict)+di-offset:len(dict)+di-offset+mLen])
+				di = di + mLen
+			} else {
+				// The match stretches over the dictionnary and our block
+				copySize := offset - di
+				restSize := mLen - copySize
+
+				copy(dst[di:di+copySize], dict[len(dict)-copySize:])
+				di = di + copySize
+
+				if di < restSize {
+					// We want to copy above what we currently have available.
+					// Data is overlapping so copy byte per byte.
+					copyFrom := 0
+					endOfMatch := di + restSize
+					for di < endOfMatch {
+						dst[di] = dst[copyFrom]
+						di = di + 1
+						copyFrom = copyFrom + 1
+					}
+				} else {
+					copy(dst[di:di+restSize], dst[0:restSize])
+					di = di + restSize
+				}
+			}
+			continue
+		}
 		// Copy the match.
 		expanded := dst[di-offset:]
 		if mLen > offset {

@@ -16,9 +16,11 @@
 // R11 &dst
 // R12 short output end
 // R13 short input end
-// func decodeBlock(dst, src []byte) int
-// using 50 bytes of stack currently
-TEXT ·decodeBlock(SB), NOSPLIT, $64-56
+// R14 &dict
+// R15 &dict + len(dict)
+// func decodeBlock(dst, src, dict []byte) int
+// using XXX bytes of stack currently
+TEXT ·decodeBlock(SB), NOSPLIT, $96-80
 	MOVQ dst_base+0(FP), DI
 	MOVQ DI, R11
 	MOVQ dst_len+8(FP), R8
@@ -27,6 +29,10 @@ TEXT ·decodeBlock(SB), NOSPLIT, $64-56
 	MOVQ src_base+24(FP), SI
 	MOVQ src_len+32(FP), R9
 	ADDQ SI, R9
+
+	MOVQ dict_base+48(FP), R14
+	MOVQ dict_len+56(FP), R15
+	ADDQ R14, R15
 
 	// shortcut ends
 	// short output end
@@ -94,6 +100,11 @@ loop:
 	// match length, we already have the offset.
 	CMPQ CX, $0xF
 	JEQ match_len_loop_pre
+
+	// if the match starts in the dictionnary, skip the optimization
+	CMPQ DX, R11
+	JLT match_len_loop_pre
+
 	CMPQ DX, $8
 	JLT match_len_loop_pre
 	CMPQ AX, R11
@@ -283,7 +294,7 @@ copy_match:
 	// check BX is within dst
 	// if BX < &dst
 	CMPQ BX, R11
-	JLT err_short_buf
+	JLT copy_match_from_dict
 
 	// if offset + match_len < di
 	MOVQ BX, AX
@@ -331,6 +342,82 @@ copy_interior_match:
 	ADDQ CX, DI
 	JMP loop
 
+copy_match_from_dict:
+	// CX = match_len
+	// BX = &dst + (di - offset)
+
+	// AX = offset - di = dict_bytes_available => count of bytes potentially covered by the dictionnary
+	MOVQ R11, AX
+	SUBQ BX, AX
+
+	// BX = &dict_end - dict_bytes_available
+	MOVQ R15, BX
+	SUBQ AX, BX
+
+	// check BX is within dict
+	// if BX < &dict
+	CMPQ BX, R14
+	JLT err_short_dict
+
+	// if match_len > dict_bytes_available, match fits entirely within external dictionary : just copy
+	CMPQ CX, AX
+	JLT memmove_match
+
+	// The match stretches over the dictionnary and our block
+	// 1) copy what comes from the dictionnary
+	// AX = dict_bytes_available = copy_size
+	// BX = &dict_end - copy_size
+	// CX = match_len
+
+	// memmove(to, from, len)
+	MOVQ DI, 0(SP)
+	MOVQ BX, 8(SP)
+	MOVQ AX, 16(SP)
+
+	// store extra stuff we want to recover
+	// spill
+	MOVQ DI, 24(SP)
+	MOVQ SI, 32(SP)
+	MOVQ CX, 40(SP)
+	CALL runtime·memmove(SB)
+
+	// restore registers
+	MOVQ 16(SP), AX // copy_size
+	MOVQ 24(SP), DI
+	MOVQ 32(SP), SI
+	MOVQ 40(SP), CX // match_len
+
+	// recalc initial values
+	MOVQ dst_base+0(FP), R8
+	MOVQ R8, R11 // TODO: make these sensible numbers
+	ADDQ dst_len+8(FP), R8
+	MOVQ src_base+24(FP), R9
+	ADDQ src_len+32(FP), R9
+	MOVQ dict_base+48(FP), R14
+	MOVQ dict_len+56(FP), R15
+	ADDQ R14, R15
+	MOVQ R8, R12
+	SUBQ $32, R12
+	MOVQ R9, R13
+	SUBQ $16, R13
+
+	// di+=copy_size
+	ADDQ AX, DI
+
+	// 2) copy the rest from the current block
+	// CX = match_len - copy_size = rest_size
+	SUBQ AX, CX
+	MOVQ R11, BX
+
+	// check if we have a copy overlap
+    // AX = &dst + rest_size
+	MOVQ CX, AX
+	ADDQ BX, AX
+    // if &dst + rest_size > di, copy byte by byte
+	CMPQ AX, DI
+
+	JGT copy_match_loop
+
 memmove_match:
 	// memmove(to, from, len)
 	MOVQ DI, 0(SP)
@@ -353,6 +440,9 @@ memmove_match:
 	ADDQ dst_len+8(FP), R8
 	MOVQ src_base+24(FP), R9
 	ADDQ src_len+32(FP), R9
+	MOVQ dict_base+48(FP), R14
+	MOVQ dict_len+56(FP), R15
+	ADDQ R14, R15
 	MOVQ R8, R12
 	SUBQ $32, R12
 	MOVQ R9, R13
@@ -362,14 +452,18 @@ memmove_match:
 	JMP loop
 
 err_corrupt:
-	MOVQ $-1, ret+48(FP)
+	MOVQ $-1, ret+72(FP)
 	RET
 
 err_short_buf:
-	MOVQ $-2, ret+48(FP)
+	MOVQ $-2, ret+72(FP)
+	RET
+
+err_short_dict:
+	MOVQ $-3, ret+72(FP)
 	RET
 
 end:
 	SUBQ R11, DI
-	MOVQ DI, ret+48(FP)
+	MOVQ DI, ret+72(FP)
 	RET

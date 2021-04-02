@@ -107,6 +107,7 @@ type Header struct {
 	BlockMaxSize     int    // Size of the uncompressed data block (one of [64KB, 256KB, 1MB, 4MB]). Default=4MB.
 	Size             uint64 // Frame total size. It is _not_ computed by the Writer.
 	CompressionLevel int    // Compression level (higher is better, use 0 for fastest compression).
+	BlockLinked      bool   // Independent or Linked block flag.
 	done             bool   // Header processed flag (Read or Write and checked).
 }
 

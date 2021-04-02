@@ -49,7 +49,7 @@ func ExampleCompressBlock() {
 
 	// Allocated a very large buffer for decompression.
 	out := make([]byte, 10*len(data))
-	n, err = lz4.UncompressBlock(buf, out)
+	n, err = lz4.UncompressBlock(buf, out, nil)
 	if err != nil {
 		fmt.Println(err)
 	}

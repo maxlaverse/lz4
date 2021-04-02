@@ -124,7 +124,7 @@ func TestBlockDecode(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			buf := make([]byte, len(test.exp))
-			n := decodeBlock(buf, test.src)
+			n := decodeBlock(buf, test.src, nil)
 			if n <= 0 {
 				t.Log(-n)
 			}

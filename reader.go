@@ -27,12 +27,13 @@ type Reader struct {
 	checksum xxh32.XXHZero // Frame hash.
 	skip     int64         // Bytes to skip before next read.
 	dpos     int64         // Position in dest
+	dict     []byte
 }
 
 // NewReader returns a new LZ4 frame decoder.
 // No access to the underlying io.Reader is performed.
 func NewReader(src io.Reader) *Reader {
-	r := &Reader{src: src}
+	r := &Reader{src: src, dict: []byte{}}
 	return r
 }
 
@@ -81,7 +82,7 @@ func (z *Reader) readHeader(first bool) error {
 		return fmt.Errorf("lz4: invalid version: got %d; expected %d", v, Version)
 	}
 	if b>>5&1 == 0 {
-		return ErrBlockDependency
+		z.BlockLinked = true
 	}
 	z.BlockChecksum = b>>4&1 > 0
 	frameSize := b>>3&1 > 0
@@ -231,7 +232,9 @@ func (z *Reader) Read(buf []byte) (int, error) {
 					return 0, fmt.Errorf("lz4: invalid block checksum: got %x; expected %x", h, checksum)
 				}
 			}
-
+			if z.BlockLinked {
+				z.updateDict(z.data, int(bLen))
+			}
 		} else {
 			// Compressed block.
 			if debugFlag {
@@ -258,11 +261,14 @@ func (z *Reader) Read(buf []byte) (int, error) {
 				}
 			}
 
-			n, err := UncompressBlock(zdata, z.data)
+			n, err := UncompressBlock(zdata, z.data, z.dict)
 			if err != nil {
 				return 0, err
 			}
 			z.data = z.data[:n]
+			if z.BlockLinked {
+				z.updateDict(z.data, int(n))
+			}
 			if z.OnBlockDone != nil {
 				z.OnBlockDone(n)
 			}
@@ -332,4 +338,12 @@ func (z *Reader) readUint32() (uint32, error) {
 	_, err := io.ReadFull(z.src, buf)
 	x := binary.LittleEndian.Uint32(buf)
 	return x, err
+}
+
+func (z *Reader) updateDict(dst []byte, n int) {
+	if len(z.dict)+n > z.BlockMaxSize+2*blockSize64K {
+		preserveSize := blockSize64K - n
+		z.dict = z.dict[len(z.dict)-preserveSize:]
+	}
+	z.dict = append(z.dict, dst[0:n]...)
 }

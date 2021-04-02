@@ -13,8 +13,6 @@ var (
 	ErrInvalidSourceShortBuffer = errors.New("lz4: invalid source or destination buffer too short")
 	// ErrInvalid is returned when reading an invalid LZ4 archive.
 	ErrInvalid = errors.New("lz4: bad magic number")
-	// ErrBlockDependency is returned when attempting to decompress an archive created with block dependency.
-	ErrBlockDependency = errors.New("lz4: block dependency not supported")
 	// ErrUnsupportedSeek is returned when attempting to Seek any way but forward from the current position.
 	ErrUnsupportedSeek = errors.New("lz4: can only seek forward from io.SeekCurrent")
 )

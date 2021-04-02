@@ -129,7 +129,7 @@ func (z *ReaderLegacy) Read(buf []byte) (int, error) {
 		}
 		z.pos += int64(bLen)
 
-		n, err := UncompressBlock(zdata, z.data)
+		n, err := UncompressBlock(zdata, z.data, nil)
 		if err != nil {
 			return 0, err
 		}
